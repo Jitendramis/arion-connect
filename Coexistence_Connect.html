@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arion — Connect WhatsApp Business App (Coexistence)</title>
+<style>
+body{font-family:Arial,sans-serif !important;background:#f5f6fa !important;color:#1f2937 !important;margin:0 !important;padding:24px !important}
+.card{max-width:720px !important;margin:0 auto 16px auto !important;background:#fff !important;border-radius:12px !important;padding:20px !important;box-shadow:0 1px 4px rgba(0,0,0,.08) !important}
+h1{font-size:20px !important;margin:0 0 6px 0 !important}
+.muted{color:#6b7280 !important;font-size:13px !important;line-height:1.5 !important}
+button{background:#1877f2 !important;color:#fff !important;border:none !important;border-radius:8px !important;padding:12px 20px !important;font-size:15px !important;font-weight:bold !important;cursor:pointer !important}
+button:disabled{opacity:.5 !important;cursor:not-allowed !important}
+ol{padding-left:20px !important;font-size:13px !important;line-height:1.7 !important}
+#log{font-family:Consolas,monospace !important;font-size:12px !important;background:#0f172a !important;color:#e2e8f0 !important;border-radius:8px !important;padding:12px !important;white-space:pre-wrap !important;min-height:80px !important}
+.ok{color:#16a34a !important;font-weight:bold !important}
+.bad{color:#dc2626 !important;font-weight:bold !important}
+label{font-size:12px !important;color:#374151 !important}
+input{width:100% !important;padding:8px !important;border:1px solid #d1d5db !important;border-radius:6px !important;font-size:13px !important;box-sizing:border-box !important}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Connect WhatsApp Business App to Cloud API</h1>
+  <div class="muted">Arion Scaffolding — Coexistence onboarding for +91 99119 35577. The WhatsApp Business app keeps working on the phone; bulk template messages go through Cloud API.</div>
+</div>
+
+<div class="card">
+  <ol>
+    <li>Keep the phone with <b>+91 99119 35577</b> ready, WhatsApp Business app open (version 2.24.17 or newer).</li>
+    <li>Click <b>Connect</b>. In the Meta window choose <b>connect your existing WhatsApp Business app</b> and enter the number.</li>
+    <li>On the phone, open the message from Facebook, tap <b>Connect</b> &rarr; <b>Connect to the Business Platform</b> &rarr; <b>Confirm</b> (share chat history), and paste the code in the Meta window.</li>
+    <li>Finish the Meta window. This page then sends the result to the Arion bot, which subscribes webhooks and syncs contacts + chat history automatically. Keep the WhatsApp Business app open until the log below says <b>Done</b>.</li>
+  </ol>
+  <button id="btnConnect" disabled>Loading Facebook…</button>
+</div>
+
+<div class="card">
+  <label>Fallback WhatsApp Business Account ID (used only if Meta does not return one)</label>
+  <input id="fallbackWaba" value="">
+</div>
+
+<div class="card">
+  <div class="muted" style="margin-bottom:6px">Log</div>
+  <div id="log"></div>
+</div>
+
+<script>
+/* ── CONFIG — fill these 3 before hosting ── */
+var APP_ID      = '826274456958930';
+var CONFIG_ID   = 'PASTE_CONFIGURATION_ID';     /* Facebook Login for Business > Configurations */
+var BOT_URL     = 'PASTE_CUSTOMER_BOT_EXEC_URL'; /* Customer Bot /exec URL */
+var ES_PAGE_KEY = 'PASTE_SAME_KEY_AS_BOT';       /* same as bot Script Property ES_PAGE_KEY */
+
+var session = null;   /* from WA_EMBEDDED_SIGNUP message */
+var code = '';        /* from FB.login */
+var submitted = false;
+
+function $(id) { return document.getElementById(id); }
+function log(msg, cls) {
+  var line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+  $('log').appendChild(line);
+}
+
+/* Session logging: Meta posts the WABA / phone IDs to this window */
+window.addEventListener('message', function (event) {
+  var o = String(event.origin || '');
+  if (!/(^|\.)facebook\.com$/.test(o.replace(/^https?:\/\//, ''))) return;
+  var data;
+  try { data = JSON.parse(event.data); } catch (e) { return; }
+  if (!data || data.type !== 'WA_EMBEDDED_SIGNUP') return;
+  log('Meta event: ' + data.event + ' ' + JSON.stringify(data.data || {}));
+  if (String(data.event).indexOf('FINISH') === 0) {
+    session = { event: data.event, waba_id: (data.data && data.data.waba_id) || '', phone_number_id: (data.data && data.data.phone_number_id) || '' };
+    trySubmit();
+  } else if (data.event === 'CANCEL') {
+    log('Cancelled at step: ' + JSON.stringify(data.data || {}), 'bad');
+  } else if (data.event === 'ERROR') {
+    log('Meta error: ' + JSON.stringify(data.data || {}), 'bad');
+  }
+});
+
+function fbCallback(response) {
+  if (response && response.authResponse && response.authResponse.code) {
+    code = response.authResponse.code;
+    log('Authorization code received.', 'ok');
+    trySubmit();
+    /* If the session message never arrives, submit with the code alone after 8 s */
+    setTimeout(function () { if (!submitted) { log('No session data from Meta — submitting with the fallback WABA ID.'); trySubmit(true); } }, 8000);
+  } else {
+    log('Meta window closed without authorization (cancelled or popup blocked).', 'bad');
+  }
+}
+
+function launch() {
+  if (CONFIG_ID.indexOf('PASTE_') === 0 || BOT_URL.indexOf('PASTE_') === 0 || ES_PAGE_KEY.indexOf('PASTE_') === 0) {
+    log('Page not configured: set CONFIG_ID, BOT_URL and ES_PAGE_KEY in the page source.', 'bad'); return;
+  }
+  log('Opening Meta Embedded Signup…');
+  FB.login(fbCallback, {
+    config_id: CONFIG_ID,
+    response_type: 'code',
+    override_default_response_type: true,
+    extras: {
+      setup: {},
+      featureType: 'whatsapp_business_app_onboarding',
+      sessionInfoVersion: '3'
+    }
+  });
+}
+
+function trySubmit(force) {
+  if (submitted || !code) return;
+  if (!session && !force) return;
+  submitted = true;
+  var payload = {
+    action: 'es_finish',
+    key: ES_PAGE_KEY,
+    code: code,
+    event: session ? session.event : 'NO_SESSION',
+    waba_id: (session && session.waba_id) || $('fallbackWaba').value.trim(),
+    phone_number_id: (session && session.phone_number_id) || ''
+  };
+  log('Sending result to the Arion bot…');
+  fetch(BOT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) })
+    .then(function () { log('Sent. Waiting for the bot to finish (subscribe + sync)…'); pollStatus(0); })
+    .catch(function (e) { log('Could not reach the bot: ' + e, 'bad'); submitted = false; });
+}
+
+/* JSONP status polling (Apps Script does not send CORS headers) */
+var shownSteps = 0;
+window.esCb = function (r) {
+  if (!r || !r.ok) { log('Status error: ' + JSON.stringify(r), 'bad'); return; }
+  var st = r.status || {};
+  var steps = st.steps || [];
+  for (var i = shownSteps; i < steps.length; i++) {
+    log((steps[i].ok ? 'OK   ' : 'FAIL ') + steps[i].step + ' — ' + steps[i].detail, steps[i].ok ? 'ok' : 'bad');
+  }
+  shownSteps = steps.length;
+  if (st.done) {
+    log('Done. WABA ' + st.waba + ', phone ' + st.phone + ', platform_type ' + st.platform_type + '. Keep the WhatsApp Business app open for a few minutes while history syncs.', st.platform_type === 'CLOUD_API' ? 'ok' : 'bad');
+    window.__esDone = true;
+  }
+};
+function pollStatus(n) {
+  if (window.__esDone || n > 36) return;
+  var s = document.createElement('script');
+  s.src = BOT_URL + '?action=es_status&key=' + encodeURIComponent(ES_PAGE_KEY) + '&callback=esCb&t=' + Date.now();
+  s.onload = function () { document.body.removeChild(s); };
+  s.onerror = function () { document.body.removeChild(s); };
+  document.body.appendChild(s);
+  setTimeout(function () { pollStatus(n + 1); }, 5000);
+}
+
+window.fbAsyncInit = function () {
+  FB.init({ appId: APP_ID, autoLogAppEvents: true, xfbml: false, version: 'v21.0' });
+  $('btnConnect').disabled = false;
+  $('btnConnect').textContent = 'Connect WhatsApp Business app';
+};
+$('btnConnect').addEventListener('click', launch);
+</script>
+<script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+</body>
+</html>
