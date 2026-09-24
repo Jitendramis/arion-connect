@@ -36,7 +36,12 @@ input{width:100% !important;padding:8px !important;border:1px solid #d1d5db !imp
 </div>
 
 <div class="card">
-  <label>Fallback WhatsApp Business Account ID (used only if Meta does not return one)</label>
+  <div class="muted" style="margin-bottom:8px">Private values — typed here only, never saved in this file or on GitHub. They disappear when you close the tab.</div>
+  <label>Customer Bot /exec URL</label>
+  <input id="botUrl" type="password" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec">
+  <label style="margin-top:8px;display:block">Page key (same as bot property ES_PAGE_KEY)</label>
+  <input id="pageKey" type="password" autocomplete="off">
+  <label style="margin-top:8px;display:block">Fallback WhatsApp Business Account ID (used only if Meta does not return one)</label>
   <input id="fallbackWaba" value="">
 </div>
 
@@ -46,11 +51,12 @@ input{width:100% !important;padding:8px !important;border:1px solid #d1d5db !imp
 </div>
 
 <script>
-/* ── CONFIG — fill these 3 before hosting ── */
-var APP_ID      = '826274456958930';
-var CONFIG_ID   = 'PASTE_CONFIGURATION_ID';     /* Facebook Login for Business > Configurations */
-var BOT_URL     = 'PASTE_CUSTOMER_BOT_EXEC_URL'; /* Customer Bot /exec URL */
-var ES_PAGE_KEY = 'PASTE_SAME_KEY_AS_BOT';       /* same as bot Script Property ES_PAGE_KEY */
+/* ── CONFIG — only PUBLIC values here (App ID and Configuration ID are public by design).
+   Bot URL and page key are typed on the page at run time, never stored in this file. ── */
+var APP_ID    = '826274456958930';
+var CONFIG_ID = 'abcdefghij';     /* Facebook Login for Business > Configurations */
+var BOT_URL = '';
+var ES_PAGE_KEY = '';
 
 var session = null;   /* from WA_EMBEDDED_SIGNUP message */
 var code = '';        /* from FB.login */
@@ -95,9 +101,11 @@ function fbCallback(response) {
 }
 
 function launch() {
-  if (CONFIG_ID.indexOf('PASTE_') === 0 || BOT_URL.indexOf('PASTE_') === 0 || ES_PAGE_KEY.indexOf('PASTE_') === 0) {
-    log('Page not configured: set CONFIG_ID, BOT_URL and ES_PAGE_KEY in the page source.', 'bad'); return;
-  }
+  BOT_URL = $('botUrl').value.trim();
+  ES_PAGE_KEY = $('pageKey').value.trim();
+  if (CONFIG_ID.indexOf('PASTE_') === 0) { log('Page not configured: set CONFIG_ID in the page source.', 'bad'); return; }
+  if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(BOT_URL)) { log('Enter the Customer Bot /exec URL first.', 'bad'); return; }
+  if (ES_PAGE_KEY.length < 8) { log('Enter the page key (same as ES_PAGE_KEY in the bot).', 'bad'); return; }
   log('Opening Meta Embedded Signup…');
   FB.login(fbCallback, {
     config_id: CONFIG_ID,
